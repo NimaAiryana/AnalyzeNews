@@ -63,6 +63,8 @@ def _analysis_to_response(doc: dict) -> AnalysisResponse:
         market_sentiment=doc.get("market_sentiment", ""),
         sentiment_score=doc.get("sentiment_score"),
         key_points=doc.get("key_points", []),
+        confidence=doc.get("confidence"),
+        stages=doc.get("stages"),
         sources=[
             NewsItemResponse(
                 url=s.get("url", ""),

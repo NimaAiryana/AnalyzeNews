@@ -54,5 +54,7 @@ class AnalysisResponse(BaseModel):
     market_sentiment: str
     sentiment_score: float | None = None
     key_points: list[str] = []
+    confidence: float | None = None
+    stages: dict[str, Any] | None = None
     sources: list[NewsItemResponse] = []
     created_at: datetime | None = None

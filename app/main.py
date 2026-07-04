@@ -23,7 +23,13 @@ async def lifespan(app: FastAPI):
     await connect_to_mongo()
     if settings.seed_default_symbols:
         await seed_default_symbols()
-    logger.info("%s v%s started (AI provider: %s)", settings.app_name, __version__, settings.ai_provider)
+    logger.info(
+        "%s v%s started (Gemini: flash=%s, pro=%s)",
+        settings.app_name,
+        __version__,
+        settings.gemini_flash_model,
+        settings.gemini_pro_model,
+    )
     yield
     await close_mongo_connection()
 

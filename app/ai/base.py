@@ -1,4 +1,4 @@
-"""Abstract AI provider interface so OpenAI / Anthropic are interchangeable."""
+"""Abstract AI provider interface so different models are interchangeable."""
 
 from abc import ABC, abstractmethod
 

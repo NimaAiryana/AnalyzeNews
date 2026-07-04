@@ -5,7 +5,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from app.ai.factory import build_ai_provider
+from app.ai.factory import build_gemini_flash, build_gemini_pro
 from app.config import Settings, get_settings
 from app.db.mongodb import JOBS, get_db
 from app.models.enums import JobStatus, SourceSite
@@ -80,14 +80,15 @@ class JobService:
 
             news = await CrawlService.get_news_for_analysis(symbol, date_from, date_to)
 
-            # ---- Stage 2: analyze ----
+            # ---- Stage 2: analyze (Gemini Flash + Pro in parallel, then Pro final) ----
             await self._update(
                 job_id,
                 JobStatus.ANALYZING,
-                f"analyzing {len(news)} articles with AI",
+                f"analyzing {len(news)} articles with Gemini Flash + Pro",
             )
-            ai_provider = build_ai_provider(self.settings)
-            analysis_service = AnalysisService(self.settings, ai_provider)
+            flash_provider = build_gemini_flash(self.settings)
+            pro_provider = build_gemini_pro(self.settings)
+            analysis_service = AnalysisService(self.settings, flash_provider, pro_provider)
             analysis = await analysis_service.analyze(query, news, date_from, date_to, job_id)
 
             # ---- Done ----
@@ -124,6 +125,7 @@ class JobService:
                     "sentiment_score": analysis.get("sentiment_score"),
                     "key_points": analysis.get("key_points", []),
                     "article_count": analysis.get("article_count", 0),
+                    "stages": analysis.get("stages"),
                 },
             }},
         )

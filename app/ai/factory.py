@@ -1,15 +1,14 @@
-"""Factory that builds the configured AI provider."""
+"""Factory helpers that build the configured Gemini providers."""
 
-from app.ai.anthropic_provider import AnthropicProvider
-from app.ai.base import AIProvider
-from app.ai.openai_provider import OpenAIProvider
+from app.ai.gemini_provider import GeminiProvider
 from app.config import Settings
 
 
-def build_ai_provider(settings: Settings) -> AIProvider:
-    provider = (settings.ai_provider or "openai").strip().lower()
-    if provider == "openai":
-        return OpenAIProvider(settings)
-    if provider == "anthropic":
-        return AnthropicProvider(settings)
-    raise ValueError(f"Unsupported AI_PROVIDER '{settings.ai_provider}' (use 'openai' or 'anthropic')")
+def build_gemini_pro(settings: Settings) -> GeminiProvider:
+    # 🎯 Deep model: used both in stage 1 and for the final combined verdict
+    return GeminiProvider(settings, settings.gemini_pro_model)
+
+
+def build_gemini_flash(settings: Settings) -> GeminiProvider:
+    # ⚡ Fast model: runs in parallel with Pro during stage 1
+    return GeminiProvider(settings, settings.gemini_flash_model)

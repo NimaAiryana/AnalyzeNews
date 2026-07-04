@@ -1,6 +1,6 @@
 # Crypto News Analysis Engine
 
-A fully headless backend engine that crawls crypto news sites in the background (no browser window ever opens), stores articles in MongoDB with deduplication, and uses an LLM (OpenAI or Anthropic) to produce a concise fundamental analysis of a given coin.
+A fully headless backend engine that crawls crypto news sites in the background (no browser window ever opens), stores articles in MongoDB with deduplication, and uses Google Gemini to produce a concise fundamental analysis of a given coin.
 
 ## What it does
 
@@ -8,7 +8,7 @@ A fully headless backend engine that crawls crypto news sites in the background 
 2. You call `POST /api/v1/analyze` with a symbol (e.g. `BTC`) and a time window.
 3. The engine crawls the configured news sites **in parallel**, purely over HTTP (RSS/HTML), and stores results in MongoDB. Already-seen articles are skipped (dedup by URL hash).
 4. All relevant news is fed to the AI in **one unified prompt**.
-5. The AI returns a 1–3 paragraph summary, the coin's status, and overall market sentiment — stored in an `analyses` collection.
+5. **Two Gemini models analyse the same news in parallel** (Flash + Pro); both runs are stored as history. Then **Gemini Pro reviews both** and produces the final reconciled verdict (summary, coin status, market sentiment).
 6. The API responds immediately with a `job_id`; you poll for the result.
 
 ## Tech stack
@@ -16,7 +16,7 @@ A fully headless backend engine that crawls crypto news sites in the background 
 - **FastAPI** + **Uvicorn** — async API
 - **httpx** + **BeautifulSoup** + **feedparser** — headless crawling (no browser)
 - **Motor** — async MongoDB driver
-- **OpenAI** / **Anthropic** — pluggable AI provider (set via `AI_PROVIDER`)
+- **Google Gemini** (`google-genai`) — two-stage analysis with Google Search grounding + thinking
 
 ## Sites crawled (hardcoded, per-site strategy)
 
@@ -38,8 +38,8 @@ pip install -r requirements.txt
 
 # 2. Configure environment
 cp .env.example .env
-#   - set AI_PROVIDER=openai (or anthropic)
-#   - set OPENAI_API_KEY (or ANTHROPIC_API_KEY)
+#   - set GEMINI_API_KEY (from Google AI Studio)
+#   - optionally adjust GEMINI_PRO_MODEL / GEMINI_FLASH_MODEL
 #   - ensure MongoDB is running at MONGO_URI
 
 # 3. Run

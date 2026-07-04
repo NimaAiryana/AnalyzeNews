@@ -22,15 +22,17 @@ class Settings(BaseSettings):
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_db_name: str = "crypto_news"
 
-    # ---- AI ----
-    ai_provider: str = "openai"  # openai | anthropic
+    # ---- AI (Google Gemini / Google AI Studio) ----
     ai_output_language: str = "English"
-    ai_max_tokens: int = 1500
-    ai_temperature: float = 0.3
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4o"
-    anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-3-5-sonnet-latest"
+    gemini_api_key: str | None = None
+    # 🎯 Two models analyse in parallel; Pro also produces the final combined verdict
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
+    gemini_flash_model: str = "gemini-3-flash-preview"
+    gemini_temperature: float = 1.0
+    gemini_top_p: float = 0.95
+    gemini_max_output_tokens: int = 65536
+    gemini_thinking_level: str = "HIGH"  # HIGH | MEDIUM | LOW | MINIMAL | "" to disable
+    gemini_use_google_search: bool = True
 
     # ---- Crawler ----
     crawl_default_days: int = 7
