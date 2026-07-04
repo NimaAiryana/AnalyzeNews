@@ -14,6 +14,12 @@ _jobs = JobService()
 
 @router.post("/analyze", response_model=JobCreatedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def analyze(body: AnalyzeRequest):
+    """Start an async analysis job.
+
+    Crawls news sites for the given coin over the specified time window,
+    then runs Gemini Flash + Pro in parallel to produce a reconciled verdict.
+    Returns immediately with a job_id; poll GET /api/v1/jobs/{job_id} for the result.
+    """
     # ✅ Validate the symbol exists in the collection before spending work
     try:
         await get_symbol(body.symbol)
@@ -39,6 +45,11 @@ async def analyze(body: AnalyzeRequest):
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
 async def get_job(job_id: str):
+    """Poll the status and result of an analysis job.
+
+    Returns the job's current status (pending/crawling/analyzing/completed/failed),
+    progress message, and the final analysis result once complete.
+    """
     job = await _jobs.get_job(job_id)
     if not job:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Job '{job_id}' not found")

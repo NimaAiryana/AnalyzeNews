@@ -39,8 +39,29 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Headless crypto news crawler + AI fundamental analysis engine.",
+        description="Headless crypto news crawler + AI fundamental analysis engine powered by Google Gemini.",
         lifespan=lifespan,
+        docs_url="/swagger",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        openapi_tags=[
+            {
+                "name": "symbols",
+                "description": "Manage the dynamic list of coins (symbols) the engine accepts.",
+            },
+            {
+                "name": "analyze",
+                "description": "Kick off an async analysis job and poll its status.",
+            },
+            {
+                "name": "data",
+                "description": "Inspect stored news articles and past analyses.",
+            },
+            {
+                "name": "health",
+                "description": "Service health check.",
+            },
+        ],
     )
 
     app.add_middleware(

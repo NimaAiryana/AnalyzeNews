@@ -46,7 +46,11 @@ cp .env.example .env
 python run.py
 ```
 
-Open the interactive API docs at `http://localhost:8000/docs`.
+## API Documentation
+
+Open the interactive **Swagger UI** at `http://localhost:8000/swagger` or the **ReDoc** alternative at `http://localhost:8000/redoc`.
+
+The OpenAPI schema is available at `http://localhost:8000/openapi.json`.
 
 ## API
 

@@ -14,7 +14,8 @@ async def list_news(
     symbol: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    query = {"symbols": symbol.upper()} if symbol else {}
+    """List stored news articles, optionally filtered by coin symbol."""
+    query = {"symbols": symbol.upper()} if symbol else {}  # noqa: F841
     cursor = get_db()[NEWS].find(query).sort("published_at", -1).limit(limit)
     return [
         NewsItemResponse(
@@ -30,6 +31,7 @@ async def list_news(
 
 @router.get("/analyses/{symbol}/latest", response_model=AnalysisResponse)
 async def latest_analysis(symbol: str):
+    """Get the most recent analysis for a given coin."""
     doc = await get_db()[ANALYSES].find_one(
         {"symbol": symbol.upper()}, sort=[("created_at", -1)]
     )
@@ -40,6 +42,7 @@ async def latest_analysis(symbol: str):
 
 @router.get("/analyses/id/{analysis_id}", response_model=AnalysisResponse)
 async def analysis_by_id(analysis_id: str):
+    """Retrieve a specific analysis by its MongoDB ObjectId."""
     try:
         oid = ObjectId(analysis_id)
     except Exception:

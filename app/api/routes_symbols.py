@@ -22,20 +22,26 @@ def _to_response(doc: dict) -> SymbolResponse:
 
 @router.post("", response_model=SymbolResponse, status_code=status.HTTP_201_CREATED)
 async def create_symbol(body: AddSymbolRequest):
+    """Register a new coin (symbol) that the engine will accept in analysis requests."""
     try:
         doc = await symbol_service.add_symbol(body.symbol, body.name, body.aliases, body.enabled)
     except SymbolAlreadyExistsError:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Symbol '{body.symbol}' already exists")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Symbol '{body.symbol}' already exists",
+        )
     return _to_response(doc)
 
 
 @router.get("", response_model=list[SymbolResponse])
 async def get_symbols():
+    """List all registered coins (symbols)."""
     return [_to_response(d) for d in await symbol_service.list_symbols()]
 
 
 @router.get("/{symbol}", response_model=SymbolResponse)
 async def get_one_symbol(symbol: str):
+    """Get details of a single registered coin."""
     try:
         return _to_response(await symbol_service.get_symbol(symbol))
     except SymbolNotFoundError:
@@ -44,6 +50,7 @@ async def get_one_symbol(symbol: str):
 
 @router.patch("/{symbol}", response_model=SymbolResponse)
 async def patch_symbol(symbol: str, body: UpdateSymbolRequest):
+    """Update a coin's metadata (name, aliases, enabled status)."""
     try:
         doc = await symbol_service.update_symbol(symbol, body.model_dump(exclude_unset=True))
     except SymbolNotFoundError:
@@ -53,6 +60,7 @@ async def patch_symbol(symbol: str, body: UpdateSymbolRequest):
 
 @router.delete("/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_symbol(symbol: str):
+    """Delete a registered coin from the system."""
     try:
         await symbol_service.delete_symbol(symbol)
     except SymbolNotFoundError:
