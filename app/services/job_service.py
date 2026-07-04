@@ -80,6 +80,25 @@ class JobService:
 
             news = await CrawlService.get_news_for_analysis(symbol, date_from, date_to)
 
+            # 🚫 اگر هیچ خبری پیدا نشد، تجزیه را متوقف کن
+            if not news:
+                await self._update(
+                    job_id,
+                    JobStatus.COMPLETED,
+                    f"crawl completed: 0 articles found, skipping analysis",
+                )
+                await self._complete(job_id, crawl_stats, {
+                    "_id": None,
+                    "summary": "No articles found for analysis",
+                    "coin_status": "N/A",
+                    "market_sentiment": "N/A",
+                    "sentiment_score": None,
+                    "key_points": [],
+                    "article_count": 0,
+                    "stages": None,
+                })
+                return
+
             # ---- Stage 2: analyze (Gemini Flash + Pro in parallel, then Pro final) ----
             await self._update(
                 job_id,
@@ -110,23 +129,26 @@ class JobService:
         )
 
     async def _complete(self, job_id: str, crawl_stats: dict, analysis: dict) -> None:
+        result = {
+            "crawl": crawl_stats,
+            "summary": analysis.get("summary"),
+            "coin_status": analysis.get("coin_status"),
+            "market_sentiment": analysis.get("market_sentiment"),
+            "sentiment_score": analysis.get("sentiment_score"),
+            "key_points": analysis.get("key_points", []),
+            "article_count": analysis.get("article_count", 0),
+            "stages": analysis.get("stages"),
+        }
+        if analysis.get("_id"):
+            result["analysis_id"] = str(analysis["_id"])
+        
         await get_db()[JOBS].update_one(
             {"_id": job_id},
             {"$set": {
                 "status": JobStatus.COMPLETED.value,
                 "progress": "done",
                 "updated_at": datetime.now(timezone.utc),
-                "result": {
-                    "analysis_id": str(analysis["_id"]),
-                    "crawl": crawl_stats,
-                    "summary": analysis.get("summary"),
-                    "coin_status": analysis.get("coin_status"),
-                    "market_sentiment": analysis.get("market_sentiment"),
-                    "sentiment_score": analysis.get("sentiment_score"),
-                    "key_points": analysis.get("key_points", []),
-                    "article_count": analysis.get("article_count", 0),
-                    "stages": analysis.get("stages"),
-                },
+                "result": result,
             }},
         )
 
