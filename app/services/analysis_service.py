@@ -53,15 +53,18 @@ class AnalysisService:
         user_prompt = build_user_prompt(query, date_from, date_to, news)
 
         # ---- Stage 1: both models analyse the same news concurrently ----
+        # Pro retries on transient errors (429/5xx), then falls back to Flash.
         flash_run, pro_run = await asyncio.gather(
             self._run_model(self.flash, "flash", system_prompt, user_prompt),
-            self._run_model(self.pro, "pro", system_prompt, user_prompt),
+            self._run_with_fallback(self.pro, self.flash, "pro", system_prompt, user_prompt),
         )
 
         # ---- Stage 2: Pro reviews both stage-1 results for the final verdict ----
         final_system = build_final_system_prompt(language)
         final_user = build_final_user_prompt(query, date_from, date_to, flash_run, pro_run)
-        final_run = await self._run_model(self.pro, "final", final_system, final_user)
+        final_run = await self._run_with_fallback(
+            self.pro, self.flash, "final", final_system, final_user
+        )
 
         final = final_run["parsed"]
         doc = {
@@ -100,6 +103,29 @@ class AnalysisService:
         result = await get_db()[ANALYSES].insert_one(doc)
         doc["_id"] = result.inserted_id
         return doc
+
+    async def _run_with_fallback(
+        self,
+        primary: AIProvider,
+        fallback: AIProvider,
+        role: str,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> dict:
+        """🚫➡️⚡ Try the primary model; if it still fails after retries, use Flash."""
+        run = await self._run_model(primary, role, system_prompt, user_prompt)
+        if run["error"] and fallback.model != primary.model:
+            logger.warning(
+                "%s: primary %s failed (%s); falling back to %s",
+                role, primary.model, run["error"], fallback.model,
+            )
+            fb = await self._run_model(fallback, role, system_prompt, user_prompt)
+            fb["fallback_used"] = True
+            fb["primary_model"] = primary.model
+            fb["primary_error"] = run["error"]
+            return fb
+        run["fallback_used"] = False
+        return run
 
     async def _run_model(
         self,
@@ -142,6 +168,10 @@ class AnalysisService:
             "raw_response": run.get("raw_response", ""),
             "latency_ms": run.get("latency_ms"),
             "error": run.get("error"),
+            # 🔄 Fallback bookkeeping (set when Pro was replaced by Flash)
+            "fallback_used": run.get("fallback_used", False),
+            "primary_model": run.get("primary_model"),
+            "primary_error": run.get("primary_error"),
         }
 
     def _parse_response(self, raw: str) -> dict:

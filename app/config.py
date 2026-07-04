@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     gemini_max_output_tokens: int = 65536
     gemini_thinking_level: str = "HIGH"  # HIGH | MEDIUM | LOW | MINIMAL | "" to disable
     gemini_use_google_search: bool = True
+    # 🔄 Transient-failure handling (e.g. 429 / 5xx): retry, then fall back to Flash
+    gemini_max_retries: int = 3
+    gemini_retry_delay_seconds: float = 2.0
 
     # ---- Crawler ----
     crawl_default_days: int = 7
