@@ -25,7 +25,7 @@ class UpdateSymbolRequest(BaseModel):
     enabled: bool | None = None
 
 
-class AnalyzeRequest(BaseModel):
+class CrawlRequest(BaseModel):
     symbol: str = Field(..., description="Ticker that must exist in the symbols collection")
     days: int | None = Field(
         default=None, ge=1, le=60, description="Look-back window in days (defaults to config)"
@@ -35,6 +35,20 @@ class AnalyzeRequest(BaseModel):
     sites: list[SourceSite] | None = Field(
         default=None, description="Subset of sites to crawl; defaults to all"
     )
+
+    @field_validator("symbol")
+    @classmethod
+    def uppercase_symbol(cls, v: str) -> str:
+        return v.strip().upper()
+
+
+class AnalyzeRequest(BaseModel):
+    symbol: str = Field(..., description="Ticker that must exist in the symbols collection")
+    days: int | None = Field(
+        default=None, ge=1, le=60, description="Look-back window in days (defaults to config)"
+    )
+    date_from: datetime | None = Field(default=None, description="Explicit range start (UTC)")
+    date_to: datetime | None = Field(default=None, description="Explicit range end (UTC)")
 
     @field_validator("symbol")
     @classmethod

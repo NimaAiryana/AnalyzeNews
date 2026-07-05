@@ -20,7 +20,8 @@ class JobCreatedResponse(BaseModel):
     job_id: str
     symbol: str
     status: JobStatus
-    message: str = "Analysis job accepted. Poll GET /api/v1/jobs/{job_id} for the result."
+    job_type: str
+    message: str = ""
 
 
 class JobStatusResponse(BaseModel):

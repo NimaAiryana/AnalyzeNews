@@ -60,8 +60,10 @@ The OpenAPI schema is available at `http://localhost:8000/openapi.json`.
 | `GET` | `/api/v1/symbols` | List coins |
 | `PATCH` | `/api/v1/symbols/{symbol}` | Update a coin |
 | `DELETE` | `/api/v1/symbols/{symbol}` | Remove a coin |
-| `POST` | `/api/v1/analyze` | Start an analysis job → returns `job_id` |
+| `POST` | `/api/v1/crawl` | Start a crawl job (fetch & store articles) → returns `job_id` |
+| `POST` | `/api/v1/analyze` | Start an analysis job (AI analysis of stored articles) → returns `job_id` |
 | `GET` | `/api/v1/jobs/{job_id}` | Poll job status + result |
+| `POST` | `/api/v1/jobs/{job_id}/reprocess` | Reprocess a job with the same parameters → returns new `job_id` |
 | `GET` | `/api/v1/news?symbol=BTC` | Inspect stored news |
 | `GET` | `/api/v1/analyses/{symbol}/latest` | Latest stored analysis |
 

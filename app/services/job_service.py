@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app.ai.factory import build_gemini_flash, build_gemini_pro
 from app.config import Settings, get_settings
 from app.db.mongodb import JOBS, get_db
-from app.models.enums import JobStatus, SourceSite
+from app.models.enums import JobStatus, JobType, SourceSite
 from app.services.analysis_service import AnalysisService
 from app.services.crawl_service import CrawlService
 from app.services.symbol_service import get_symbol_query
@@ -20,7 +20,7 @@ class JobService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
-    async def create_job(
+    async def create_crawl_job(
         self,
         symbol: str,
         days: int | None,
@@ -28,7 +28,7 @@ class JobService:
         date_to: datetime | None,
         sites: list[SourceSite] | None,
     ) -> dict:
-        """Create a job document and launch the pipeline as a background task."""
+        """Create a crawl-only job document and launch as a background task."""
         resolved_to = date_to or datetime.now(timezone.utc)
         if date_from:
             resolved_from = date_from
@@ -41,6 +41,7 @@ class JobService:
         doc = {
             "_id": job_id,
             "symbol": symbol.upper(),
+            "job_type": JobType.CRAWL.value,
             "params": {
                 "date_from": resolved_from,
                 "date_to": resolved_to,
@@ -56,13 +57,51 @@ class JobService:
         await get_db()[JOBS].insert_one(doc)
 
         # 🚀 Fire-and-forget; API returns immediately while this runs in background
-        asyncio.create_task(self._run(job_id, symbol, resolved_from, resolved_to, sites))
+        asyncio.create_task(self._run_crawl(job_id, symbol, resolved_from, resolved_to, sites))
+        return doc
+
+    async def create_analyze_job(
+        self,
+        symbol: str,
+        days: int | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> dict:
+        """Create an analysis-only job document and launch as a background task."""
+        resolved_to = date_to or datetime.now(timezone.utc)
+        if date_from:
+            resolved_from = date_from
+        else:
+            window = days or self.settings.crawl_default_days
+            resolved_from = resolved_to - timedelta(days=window)
+
+        job_id = uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        doc = {
+            "_id": job_id,
+            "symbol": symbol.upper(),
+            "job_type": JobType.ANALYZE.value,
+            "params": {
+                "date_from": resolved_from,
+                "date_to": resolved_to,
+            },
+            "status": JobStatus.PENDING.value,
+            "progress": "queued",
+            "error": None,
+            "result": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        await get_db()[JOBS].insert_one(doc)
+
+        # 🚀 Fire-and-forget; API returns immediately while this runs in background
+        asyncio.create_task(self._run_analyze(job_id, symbol, resolved_from, resolved_to))
         return doc
 
     async def get_job(self, job_id: str) -> dict | None:
         return await get_db()[JOBS].find_one({"_id": job_id})
 
-    async def _run(
+    async def _run_crawl(
         self,
         job_id: str,
         symbol: str,
@@ -70,36 +109,49 @@ class JobService:
         date_to: datetime,
         sites: list[SourceSite] | None,
     ) -> None:
+        """Crawl news sites and store articles in MongoDB."""
         try:
             query = await get_symbol_query(symbol)
 
-            # ---- Stage 1: crawl ----
+            # ---- Crawl ----
             await self._update(job_id, JobStatus.CRAWLING, "crawling news sites")
             crawl_service = CrawlService(self.settings)
             crawl_stats = await crawl_service.crawl_and_store(query, date_from, date_to, sites)
 
+            # ---- Done ----
+            await self._update(job_id, JobStatus.COMPLETED, f"crawled {crawl_stats.get('total_articles', 0)} articles")
+            logger.info("Crawl job %s completed (%s)", job_id, symbol)
+
+        except Exception as exc:
+            logger.exception("Crawl job %s failed: %s", job_id, exc)
+            await self._fail(job_id, str(exc))
+
+    async def _run_analyze(
+        self,
+        job_id: str,
+        symbol: str,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> None:
+        """Analyze articles already stored in MongoDB using Gemini."""
+        try:
+            query = await get_symbol_query(symbol)
+
+            # ---- Fetch articles from MongoDB ----
+            await self._update(job_id, JobStatus.ANALYZING, "fetching articles from MongoDB")
             news = await CrawlService.get_news_for_analysis(symbol, date_from, date_to)
 
-            # 🚫 اگر هیچ خبری پیدا نشد، تجزیه را متوقف کن
+            # 🚫 اگر هیچ خبری پیدا نشد
             if not news:
                 await self._update(
                     job_id,
                     JobStatus.COMPLETED,
-                    f"crawl completed: 0 articles found, skipping analysis",
+                    "no articles found in the specified date range",
                 )
-                await self._complete(job_id, crawl_stats, {
-                    "_id": None,
-                    "summary": "No articles found for analysis",
-                    "coin_status": "N/A",
-                    "market_sentiment": "N/A",
-                    "sentiment_score": None,
-                    "key_points": [],
-                    "article_count": 0,
-                    "stages": None,
-                })
+                logger.info("Analysis job %s completed with 0 articles (%s)", job_id, symbol)
                 return
 
-            # ---- Stage 2: analyze (Gemini Flash + Pro in parallel, then Pro final) ----
+            # ---- Analyze with Gemini Flash + Pro ----
             await self._update(
                 job_id,
                 JobStatus.ANALYZING,
@@ -111,11 +163,11 @@ class JobService:
             analysis = await analysis_service.analyze(query, news, date_from, date_to, job_id)
 
             # ---- Done ----
-            await self._complete(job_id, crawl_stats, analysis)
-            logger.info("Job %s completed (%s)", job_id, symbol)
+            await self._update(job_id, JobStatus.COMPLETED, "analysis complete")
+            logger.info("Analysis job %s completed (%s)", job_id, symbol)
 
-        except Exception as exc:  # 🚫 any failure marks the job failed with a message
-            logger.exception("Job %s failed: %s", job_id, exc)
+        except Exception as exc:
+            logger.exception("Analysis job %s failed: %s", job_id, exc)
             await self._fail(job_id, str(exc))
 
     async def _update(self, job_id: str, status: JobStatus, progress: str) -> None:
@@ -125,30 +177,6 @@ class JobService:
                 "status": status.value,
                 "progress": progress,
                 "updated_at": datetime.now(timezone.utc),
-            }},
-        )
-
-    async def _complete(self, job_id: str, crawl_stats: dict, analysis: dict) -> None:
-        result = {
-            "crawl": crawl_stats,
-            "summary": analysis.get("summary"),
-            "coin_status": analysis.get("coin_status"),
-            "market_sentiment": analysis.get("market_sentiment"),
-            "sentiment_score": analysis.get("sentiment_score"),
-            "key_points": analysis.get("key_points", []),
-            "article_count": analysis.get("article_count", 0),
-            "stages": analysis.get("stages"),
-        }
-        if analysis.get("_id"):
-            result["analysis_id"] = str(analysis["_id"])
-        
-        await get_db()[JOBS].update_one(
-            {"_id": job_id},
-            {"$set": {
-                "status": JobStatus.COMPLETED.value,
-                "progress": "done",
-                "updated_at": datetime.now(timezone.utc),
-                "result": result,
             }},
         )
 

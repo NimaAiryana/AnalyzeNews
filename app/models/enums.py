@@ -19,6 +19,11 @@ class JobStatus(str, Enum):
     FAILED = "failed"
 
 
+class JobType(str, Enum):
+    CRAWL = "crawl"
+    ANALYZE = "analyze"
+
+
 class MarketSentiment(str, Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"
