@@ -119,8 +119,13 @@ class JobService:
             crawl_stats = await crawl_service.crawl_and_store(query, date_from, date_to, sites)
 
             # ---- Done ----
-            await self._update(job_id, JobStatus.COMPLETED, f"crawled {crawl_stats.get('total_articles', 0)} articles")
-            logger.info("Crawl job %s completed (%s)", job_id, symbol)
+            result = {
+                "crawled": crawl_stats.get("crawled", 0),
+                "new": crawl_stats.get("new", 0),
+                "per_site": crawl_stats.get("per_site", {}),
+            }
+            await self._update_with_result(job_id, JobStatus.COMPLETED, "crawl complete", result)
+            logger.info("Crawl job %s completed (%s): %d crawled, %d new", job_id, symbol, result["crawled"], result["new"])
 
         except Exception as exc:
             logger.exception("Crawl job %s failed: %s", job_id, exc)
@@ -143,10 +148,15 @@ class JobService:
 
             # 🚫 اگر هیچ خبری پیدا نشد
             if not news:
-                await self._update(
+                result = {
+                    "article_count": 0,
+                    "message": "no articles found in the specified date range",
+                }
+                await self._update_with_result(
                     job_id,
                     JobStatus.COMPLETED,
-                    "no articles found in the specified date range",
+                    "no articles found",
+                    result,
                 )
                 logger.info("Analysis job %s completed with 0 articles (%s)", job_id, symbol)
                 return
@@ -163,8 +173,19 @@ class JobService:
             analysis = await analysis_service.analyze(query, news, date_from, date_to, job_id)
 
             # ---- Done ----
-            await self._update(job_id, JobStatus.COMPLETED, "analysis complete")
-            logger.info("Analysis job %s completed (%s)", job_id, symbol)
+            result = {
+                "article_count": len(news),
+                "analysis_id": str(analysis.get("_id")) if analysis.get("_id") else None,
+                "summary": analysis.get("summary"),
+                "coin_status": analysis.get("coin_status"),
+                "market_sentiment": analysis.get("market_sentiment"),
+                "sentiment_score": analysis.get("sentiment_score"),
+                "key_points": analysis.get("key_points", []),
+                "confidence": analysis.get("confidence"),
+                "stages": analysis.get("stages"),
+            }
+            await self._update_with_result(job_id, JobStatus.COMPLETED, "analysis complete", result)
+            logger.info("Analysis job %s completed (%s): %d articles analyzed", job_id, symbol, len(news))
 
         except Exception as exc:
             logger.exception("Analysis job %s failed: %s", job_id, exc)
@@ -176,6 +197,17 @@ class JobService:
             {"$set": {
                 "status": status.value,
                 "progress": progress,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+
+    async def _update_with_result(self, job_id: str, status: JobStatus, progress: str, result: dict) -> None:
+        await get_db()[JOBS].update_one(
+            {"_id": job_id},
+            {"$set": {
+                "status": status.value,
+                "progress": progress,
+                "result": result,
                 "updated_at": datetime.now(timezone.utc),
             }},
         )
