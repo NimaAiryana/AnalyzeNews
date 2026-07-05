@@ -75,14 +75,27 @@ curl -X POST localhost:8000/api/v1/symbols \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"SOL","name":"Solana","aliases":["solana","sol"]}'
 
-# Start analysis for the last 7 days
+# Step 1: Crawl news for the last 7 days
+curl -X POST localhost:8000/api/v1/crawl \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"BTC","days":7}'
+# Returns: {"job_id":"abc123...","symbol":"BTC","status":"pending","job_type":"crawl",...}
+
+# Step 2: Poll crawl status
+curl localhost:8000/api/v1/jobs/abc123...
+
+# Step 3: Once crawl is done, analyze the articles
 curl -X POST localhost:8000/api/v1/analyze \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","days":7}'
-# -> {"job_id":"...","symbol":"BTC","status":"pending"}
+# Returns: {"job_id":"def456...","symbol":"BTC","status":"pending","job_type":"analyze",...}
 
-# Poll the job
-curl localhost:8000/api/v1/jobs/<job_id>
+# Step 4: Poll analysis status
+curl localhost:8000/api/v1/jobs/def456...
+
+# Step 5: Reprocess a job (e.g., if it failed or you want to retry)
+curl -X POST localhost:8000/api/v1/jobs/def456.../reprocess
+# Returns: {"job_id":"ghi789...","symbol":"BTC","status":"pending",...}
 ```
 
 ## MongoDB collections
