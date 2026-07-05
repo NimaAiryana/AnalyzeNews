@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.models.enums import JobStatus, JobType
+from app.models.enums import JobStatus, JobType, SourceSite
 from app.schemas.requests import AnalyzeRequest, CrawlRequest
 from app.schemas.responses import JobCreatedResponse, JobStatusResponse
 from app.services.job_service import JobService
@@ -115,15 +115,17 @@ async def reprocess_job(job_id: str):
     params = old_job.get("params", {})
     date_from = params.get("date_from")
     date_to = params.get("date_to")
-    sites = params.get("sites")
+    sites_raw = params.get("sites")
 
     if job_type == JobType.CRAWL.value:
+        # 🔄 Convert string sites back to SourceSite enums
+        sites = [SourceSite(s) for s in sites_raw] if sites_raw else None
         new_job = await _jobs.create_crawl_job(
             symbol=symbol,
             days=None,
             date_from=date_from,
             date_to=date_to,
-            sites=[s for s in sites] if sites else None,
+            sites=sites,
         )
     else:  # ANALYZE
         new_job = await _jobs.create_analyze_job(
